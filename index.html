@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini Solar System Explorer</title>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            font-family: Arial, sans-serif;
+        }
+        canvas { 
+            display: block; 
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+            pointer-events: none;
+        }
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            margin-left: -10px;
+            margin-top: -10px;
+            color: white;
+            text-align: center;
+            line-height: 20px;
+            pointer-events: none;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+    <div id="ui">
+        <div>Discovery Points: <span id="points">0</span></div>
+        <div>Current Planet: <span id="planet">Home</span></div>
+        <div>Altitude: <span id="altitude">0</span>m</div>
+        <div>Velocity: <span id="velocity">0</span>m/s</div>
+        <div>Fuel: <span id="fuel">100</span>%</div>
+    </div>
+    <div id="crosshair">+</div>
+    <div id="upgrades" class="hidden">
+        <!-- Upgrade UI will be added here -->
+    </div>
+
+    <!-- Game Scripts (as ES modules) -->
+    <script type="module" src="main.js"></script>
+</body>
+</html>
