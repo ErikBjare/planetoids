@@ -1,18 +1,22 @@
-import { defineConfig } from 'vite';
-import { resolve } from 'path';
+import { defineConfig } from "vite";
+import { resolve } from "path";
+
+// Get the base path from environment variable
+const basePath = process.env.BASE_PATH || "/";
+console.log("Using base path:", basePath);
 
 export default defineConfig({
-  base: process.env.BASE_PATH || '/',  // Use env var or default to '/'
+  base: basePath,
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src')
-    }
+      "@": resolve(__dirname, "src"),
+    },
   },
   build: {
-    outDir: 'dist',
-    sourcemap: true
+    outDir: "dist",
+    sourcemap: true,
   },
   server: {
-    open: true
-  }
+    open: true,
+  },
 });
