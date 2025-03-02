@@ -1,0 +1,11 @@
+repos:
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: v9.21.0
+    hooks:
+      - id: eslint
+        #files: \.(js)$
+        #types: [file]
+        args: [--fix]
+        additional_dependencies:
+          - eslint@9.21.0
+          - globals@13.6.0

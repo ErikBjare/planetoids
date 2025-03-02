@@ -5,13 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mini Solar System Explorer</title>
     <style>
-        body { 
-            margin: 0; 
-            overflow: hidden; 
+        body {
+            margin: 0;
+            overflow: hidden;
             font-family: Arial, sans-serif;
         }
-        canvas { 
-            display: block; 
+        canvas {
+            display: block;
         }
         #ui {
             position: absolute;
@@ -35,6 +35,75 @@
             text-align: center;
             line-height: 20px;
             pointer-events: none;
+            display: none;
+        }
+        #dashboard {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 60px;
+            color: white;
+            font-family: 'Arial', sans-serif;
+            pointer-events: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #stamina-container {
+            position: absolute;
+            top: 50%;
+            right: 20px;
+            width: 80px;
+            height: 80px;
+            transform: translateY(-50%);
+            pointer-events: none;
+            display: none; /* Initially hidden */
+        }
+        #fuel-container {
+            position: absolute;
+            top: 50%;
+            right: 110px;
+            width: 80px;
+            height: 80px;
+            transform: translateY(-50%);
+            pointer-events: none;
+        }
+        #interaction-prompt {
+            position: absolute;
+            bottom: 20%;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+            font-weight: bold;
+            text-align: center;
+            display: none;
+        }
+        #camera-mode {
+            position: absolute;
+            top: 40px;
+            right: 10px;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 5px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+        #upgrades {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            max-width: 500px;
+            min-width: 300px;
         }
         .hidden {
             display: none;
@@ -50,16 +119,146 @@
     </script>
 </head>
 <body>
-    <div id="ui">
-        <div>Discovery Points: <span id="points">0</span></div>
-        <div>Current Planet: <span id="planet">Home</span></div>
-        <div>Altitude: <span id="altitude">0</span>m</div>
-        <div>Velocity: <span id="velocity">0</span>m/s</div>
-        <div>Fuel: <span id="fuel">100</span>%</div>
-    </div>
-    <div id="crosshair">+</div>
-    <div id="upgrades" class="hidden">
-        <!-- Upgrade UI will be added here -->
+    <div id="game-ui">
+        <div id="ui">
+            <div>Discovery Points: <span id="points">0</span></div>
+            <div>Current Planet: <span id="planet">Home</span></div>
+            <div>Zone: <span id="zone-text"></span></div>
+            <div>Altitude: <span id="altitude">0</span>m</div>
+            <div>Velocity: <span id="velocity">0</span>m/s</div>
+            <div>Fuel: <span id="fuel">100</span>%</div>
+        </div>
+        
+        <div id="crosshair">+</div>
+        
+        <div id="dashboard">
+            <div id="instrument-panel" style="
+                width: 70%;
+                height: 100%;
+                background-color: rgba(0, 0, 0, 0.5);
+                border-top-left-radius: 10px;
+                border-top-right-radius: 10px;
+                display: flex;
+                align-items: center;
+                justify-content: space-around;
+                padding: 0 20px;
+            ">
+                <!-- Fuel indicator -->
+                <div style="text-align: center;">
+                    <div style="font-size: 12px; margin-bottom: 3px;">FUEL</div>
+                    <div id="fuel-text" style="font-size: 18px; font-weight: bold;">100%</div>
+                </div>
+
+                <!-- Day/Night indicator (can be hidden) -->
+                <div id="time-container" style="text-align: center;">
+                    <div style="font-size: 12px; margin-bottom: 3px;">TIME</div>
+                    <div style="font-size: 18px; display: flex; align-items: center;">
+                        <span id="day-night-indicator">Day</span>
+                        <span id="time-icon" style="margin-left: 5px;">☀️</span>
+                    </div>
+                </div>
+
+                <!-- Orientation Display -->
+                <div style="display: flex; flex-direction: column; align-items: center;">
+                    <div style="font-size: 12px; margin-bottom: 3px;">ORIENTATION</div>
+                    <div style="display: flex; gap: 15px;">
+                        <!-- Body orientation indicator -->
+                        <div id="body-orientation-display" style="
+                            width: 60px;
+                            height: 30px;
+                            position: relative;
+                            background-color: rgba(244, 67, 54, 0.2);
+                            border: 1px solid #F44336;
+                            border-radius: 3px;
+                        ">
+                            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 10px;">BODY</div>
+                            <!-- Body up arrow -->
+                            <div id="body-up-arrow" class="arrow" style="
+                                position: absolute;
+                                top: 50%;
+                                left: 50%;
+                                width: 0;
+                                height: 0;
+                                transform: translate(-50%, -50%);
+                                border-left: 2px solid #F44336;
+                            "></div>
+                            <!-- Body forward arrow -->
+                            <div id="body-forward-arrow" class="arrow" style="
+                                position: absolute;
+                                top: 50%;
+                                left: 50%;
+                                width: 0;
+                                height: 0;
+                                transform: translate(-50%, -50%);
+                                border-top: 2px solid #F44336;
+                            "></div>
+                        </div>
+
+                        <!-- Head/View direction indicator -->
+                        <div id="head-orientation-display" style="
+                            width: 60px;
+                            height: 30px;
+                            position: relative;
+                            background-color: rgba(76, 175, 80, 0.2);
+                            border: 1px solid #4CAF50;
+                            border-radius: 3px;
+                        ">
+                            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 10px;">VIEW</div>
+                            <!-- Look direction arrow -->
+                            <div id="look-direction-arrow" class="arrow" style="
+                                position: absolute;
+                                top: 50%;
+                                left: 50%;
+                                width: 0;
+                                height: 0;
+                                transform: translate(-50%, -50%);
+                                border-top: 2px solid #4CAF50;
+                            "></div>
+                            <!-- Look up arrow -->
+                            <div id="look-up-arrow" class="arrow" style="
+                                position: absolute;
+                                top: 50%;
+                                left: 50%;
+                                width: 0;
+                                height: 0;
+                                transform: translate(-50%, -50%);
+                                border-left: 2px solid #4CAF50;
+                            "></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="stamina-container">
+            <svg width="80" height="80" viewBox="0 0 100 100">
+                <!-- Background circle -->
+                <circle cx="50" cy="50" r="45" fill="none" stroke="#333" stroke-width="10" />
+                <!-- Stamina circle (will be dynamically updated) -->
+                <circle id="stamina-circle" cx="50" cy="50" r="45" fill="none" stroke="#4CAF50" stroke-width="10"
+                    stroke-dasharray="282.7" stroke-dashoffset="0" transform="rotate(-90 50 50)" />
+            </svg>
+        </div>
+        
+        <div id="fuel-container">
+            <svg width="80" height="80" viewBox="0 0 100 100">
+                <!-- Background circle -->
+                <circle cx="50" cy="50" r="45" fill="none" stroke="#333" stroke-width="10" />
+                <!-- Fuel circle (will be dynamically updated) -->
+                <circle id="fuel-circle" cx="50" cy="50" r="45" fill="none" stroke="#FF9800" stroke-width="10"
+                    stroke-dasharray="282.7" stroke-dashoffset="0" transform="rotate(-90 50 50)" />
+            </svg>
+        </div>
+        
+        <div id="interaction-prompt">
+            Press <span style="color: #4fc3f7; font-weight: bold;">E</span> to interact
+        </div>
+        
+        <div id="camera-mode">Camera: First Person</div>
+        
+        <div id="upgrades">
+            <!-- Upgrade UI will be added here -->
+        </div>
     </div>
 
     <!-- Game Scripts (as ES modules) -->

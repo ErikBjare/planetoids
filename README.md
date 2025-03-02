@@ -98,9 +98,10 @@ Then open your browser and navigate to the provided URL (usually http://localhos
 ### Visual Improvements
 - [ ] Add atmospheric effects for planets
 - [ ] Implement day/night cycle
+  - Partially completed, needs refinement
 - [ ] Add particle effects for jetpack
 - [ ] Improve planet textures with normal maps
-- [ ] Add skybox with distant stars and galaxies
+- [x] Add skybox with distant stars
 
 ### UI/UX
 - [ ] Create proper upgrade UI instead of alerts
@@ -130,11 +131,18 @@ Then open your browser and navigate to the provided URL (usually http://localhos
 - [ ] Add UI sound feedback
 
 ### Content Expansion
+- [ ] Gas station on home planet for refueling
+- [ ] Orbital space station (researchable) for upgrades and missions, and refueling
 - [ ] Add more planets with unique features
 - [ ] Create space stations orbiting planets
 - [ ] Implement alien NPCs with simple interactions
 - [ ] Add collectible artifacts on each planet
 - [ ] Create unique structures for each planet type
+
+## Issues
+
+- [ ] Player is not upright when landing on a planet, camera tries to adjust, but the player is still oriented "upwards" in global coordinates instead of the "local" planet surface normal
+- [ ] Weird shadow/lighting "spots" on the home planet surface, that suddenly cut off
 
 ## License
 

@@ -8,29 +8,112 @@ export class Physics {
         this.jetpackForce = 20;
         this.dragCoefficient = 0.1;
         this.inSpaceDrag = 0.001;
-        this.inAtmosphereDrag = 0.1;
+        this.inAtmosphereDrag = 0.01; // Reduced from 0.1 for more realistic momentum preservation
         this.collisionRadius = 2;
-        this.gravitationalConstant = 100; // Reduced from 1000 to prevent excessive force
+        this.gravitationalConstant = 100; // Reduced from 1000
+
+        // Surface alignment properties
+        this.alignmentSpeed = 0.05; // How quickly to align with surface
+        this.alignmentDistance = 50; // When to start aligning with surface
+
+        // Transition zone settings
+        this.atmosphereRatio = 1.25; // Atmosphere extends 50% beyond planet radius
+        this.outerAtmosphereRatio = 1.5; // Outer atmosphere for transition
+
+        // Store last zone to prevent flickering
+        this.lastZone = null;
+        this.zoneHysteresis = 1.0; // Buffer to prevent zone flickering
+        this.zoneSwitchDelay = 0; // Counter for zone switching delay
     }
 
-    // Check if player is on ground or in space
+    // Check if player is on ground or in space with more nuanced zones and hysteresis
     checkPlayerEnvironment(playerPosition, planets) {
         const nearest = this.getNearestPlanet(playerPosition, planets);
-        
-        if (!nearest.planet) return { inSpace: true, onGround: false, nearest };
-        
+
+        if (!nearest.planet) return {
+            inSpace: true,
+            onGround: false,
+            nearest,
+            atmosphereZone: 'deep-space'
+        };
+
         const planetRadius = nearest.planet.geometry.parameters.radius;
-        const atmosphereThreshold = planetRadius * 1.5;
-        const groundThreshold = 2.0; // Distance to be considered "on ground"
-        
-        // Determine environment
-        const inSpace = nearest.distance > atmosphereThreshold;
-        const onGround = nearest.distance < groundThreshold;
-        
+        const atmosphereThreshold = planetRadius * this.atmosphereRatio;
+        const outerAtmosphereThreshold = planetRadius * this.outerAtmosphereRatio;
+
+        // Adjust ground threshold to be much smaller for more precise ground detection
+        const groundThreshold = 0.8; // Significantly reduced from 2.5 for exact ground detection
+
+        // Determine environment with transition zones
+        const inDeepSpace = nearest.distance > outerAtmosphereThreshold;
+        const inUpperAtmosphere = nearest.distance <= outerAtmosphereThreshold && nearest.distance > atmosphereThreshold;
+        const inAtmosphere = nearest.distance <= atmosphereThreshold;
+
+        // Add hysteresis to ground detection to prevent flickering
+        let onGround = false;
+
+        if (this.lastZone === 'surface') {
+            // If we were on the surface, stay there until we're clearly not on the ground
+            onGround = nearest.distance < (groundThreshold + this.zoneHysteresis);
+        } else {
+            // If we weren't on the surface, only switch when clearly on the ground
+            onGround = nearest.distance < groundThreshold;
+        }
+
+        // Calculate transition factor for smooth physics blending
+        // 0 = fully in atmosphere, 1 = fully in space
+        let transitionFactor = 0;
+        if (inUpperAtmosphere) {
+            // Linear interpolation in the transition zone
+            transitionFactor = (nearest.distance - atmosphereThreshold) /
+                (outerAtmosphereThreshold - atmosphereThreshold);
+        } else if (inDeepSpace) {
+            transitionFactor = 1;
+        }
+
+        // Determine the current zone with hysteresis to prevent flickering
+        let atmosphereZone = 'deep-space';
+
+        if (onGround) {
+            atmosphereZone = 'surface';
+        } else if (nearest.distance < atmosphereThreshold * 0.3) {
+            // Add extra check to prevent flickering between surface and low-atmosphere
+            if (this.lastZone === 'surface' && nearest.distance < (groundThreshold + this.zoneHysteresis * 3)) {
+                atmosphereZone = 'surface';
+            } else {
+                atmosphereZone = 'low-atmosphere';
+            }
+        } else if (inAtmosphere) {
+            atmosphereZone = 'atmosphere';
+        } else if (inUpperAtmosphere) {
+            atmosphereZone = 'upper-atmosphere';
+        }
+
+        // Check if we need to delay zone switching to prevent rapid flickering
+        if (this.lastZone && this.lastZone !== atmosphereZone) {
+            this.zoneSwitchDelay++;
+
+            // Only switch zones after a few consistent frames
+            if (this.zoneSwitchDelay < 3) {  // Wait for 3 frames of consistent zone
+                atmosphereZone = this.lastZone;
+            } else {
+                this.zoneSwitchDelay = 0;
+            }
+        } else {
+            this.zoneSwitchDelay = 0;
+        }
+
+        // Store current zone for next frame
+        this.lastZone = atmosphereZone;
+
         return {
-            inSpace,
-            onGround,
-            nearest
+            inSpace: inDeepSpace,
+            inTransition: inUpperAtmosphere,
+            inAtmosphere: inAtmosphere,
+            onGround: onGround,
+            nearest,
+            atmosphereZone,
+            transitionFactor
         };
     }
 
@@ -38,7 +121,7 @@ export class Physics {
     getNearestPlanet(position, planets) {
         let nearestPlanet = null;
         let minDistance = Infinity;
-        
+
         planets.forEach(planet => {
             const distance = position.distanceTo(planet.position) - planet.geometry.parameters.radius;
             if (distance < minDistance) {
@@ -46,25 +129,25 @@ export class Physics {
                 nearestPlanet = planet;
             }
         });
-        
+
         return { planet: nearestPlanet, distance: minDistance };
     }
 
     // Calculate gravity from all celestial bodies
     getGravityForce(position, celestialBodies, mass = 1) {
         const gravityVector = new THREE.Vector3(0, 0, 0);
-        
+
         // Process each celestial body (sun and planets)
         celestialBodies.forEach(body => {
             // Skip if body has no position or no radius (shouldn't happen, but just in case)
             if (!body.position || !body.geometry?.parameters?.radius) return;
-            
+
             const direction = new THREE.Vector3().subVectors(body.position, position).normalize();
             const distance = position.distanceTo(body.position);
-            
+
             // Skip if too close to center (inside the body)
             if (distance <= 0.1) return;
-            
+
             // Calculate mass based on body type
             let bodyMass;
             if (body.userData?.isSun) {
@@ -72,192 +155,366 @@ export class Physics {
             } else {
                 bodyMass = body.geometry.parameters.radius;
             }
-            
+
             // Gravity falls off with square of distance
             // Limit minimum distance to prevent extreme forces
             const clampedDistance = Math.max(distance, body.geometry.parameters.radius * 0.5);
             const force = this.gravitationalConstant * (bodyMass * mass) / (clampedDistance * clampedDistance);
-            
+
             // Apply softer gravity curves for better gameplay
-            const scaledForce = Math.min(force, 50); // Cap maximum force
-            
+            const scaledForce = Math.min(force, 20); // Cap maximum force
+
             gravityVector.add(direction.clone().multiplyScalar(scaledForce));
         });
-        
+
         return gravityVector;
     }
 
-    // Handle collisions with planets
+    // Handle collisions with planets - improved for proper landing
     handlePlanetCollisions(playerPosition, playerVelocity, planets, collisionRadius) {
         let onGround = false;
         let collidedPlanet = null;
-        
+        let surfaceNormal = null;
+
+        // Reduce collision radius for more precise ground detection
+        const groundCollisionRadius = 0.5; // Reduced from 2.0 or whatever it was before
+
         // Check collisions with all planets
         for (const planet of planets) {
             const planetPos = planet.position;
             const planetRadius = planet.geometry.parameters.radius;
-            
+
             const distanceToCenter = playerPosition.distanceTo(planetPos);
             const distanceToSurface = distanceToCenter - planetRadius;
-            
-            if (distanceToSurface < collisionRadius) {
+
+            if (distanceToSurface < groundCollisionRadius) {
                 // Collision with planet surface
-                
+
                 // Calculate normal direction (away from planet center)
                 const normal = new THREE.Vector3().subVectors(playerPosition, planetPos).normalize();
-                
-                // Position correction - push out to surface
-                const correctionDistance = collisionRadius - distanceToSurface;
+                surfaceNormal = normal.clone();
+
+                // Position correction - place exactly on surface with no floating
+                const correctionDistance = (groundCollisionRadius - distanceToSurface);
                 playerPosition.add(normal.clone().multiplyScalar(correctionDistance));
-                
-                // Velocity correction - reflect velocity along normal with some damping
+
+                // Velocity correction - cancel out velocity component towards the planet
                 const dot = playerVelocity.dot(normal);
-                if (dot < 0) { // Only reflect if moving toward the planet
-                    playerVelocity.sub(normal.multiplyScalar(dot * 1.6)); // 1.6 for some bounce
-                    
-                    // Add friction to slow down sliding
-                    const tangentialVelocity = new THREE.Vector3().copy(playerVelocity);
-                    tangentialVelocity.sub(normal.clone().multiplyScalar(playerVelocity.dot(normal)));
-                    tangentialVelocity.multiplyScalar(0.95); // 5% friction
-                    
-                    playerVelocity.copy(tangentialVelocity);
-                    playerVelocity.add(normal.clone().multiplyScalar(Math.max(0, dot * 0.6))); // Bounce
+                if (dot < 0) { // Only apply if moving toward the planet
+                    playerVelocity.sub(normal.clone().multiplyScalar(dot));
+
+                    // Apply stronger damping to prevent sliding
+                    playerVelocity.multiplyScalar(0.8);
                 }
-                
+
                 // Mark as on ground
                 onGround = true;
                 collidedPlanet = planet;
                 break; // Stop after first collision
             }
         }
-        
-        return { onGround, collidedPlanet };
+
+        return { onGround, collidedPlanet, surfaceNormal };
     }
 
-    // Update player physics
+    // Calculate the UP direction based on nearest planet
+    calculateUpDirection(playerPosition, planets) {
+        const nearest = this.getNearestPlanet(playerPosition, planets);
+
+        if (!nearest.planet || nearest.distance > this.alignmentDistance) {
+            // Default to global up if no planet or too far
+            return new THREE.Vector3(0, 1, 0);
+        }
+
+        // Calculate direction away from planet center (this is "up" relative to the planet)
+        return new THREE.Vector3().subVectors(playerPosition, nearest.planet.position).normalize();
+    }
+
+    // Update player physics with smoother transitions
     updatePlayerPhysics(player, controls, deltaTime, planets, sun, camera, gameState) {
+        // Handle stamina for sprinting
+        this.updateStamina(player, controls, deltaTime);
+
         // Check if noclip mode is active
         if (gameState.noclip) {
             // In noclip mode, apply direct camera-based movement with no physics
             const moveDirection = this.calculateMoveDirection(controls, camera, true, false);
-            
+
             if (moveDirection.length() > 0) {
                 // Faster movement in noclip mode
-                const noclipSpeed = this.moveSpeed * 3;
+                let noclipSpeed = this.moveSpeed * 100;
+
+                // Apply sprint multiplier in noclip mode if sprinting
+                if (controls.sprint) {
+                    // 3x speed in noclip while sprinting (9x base speed)
+                    noclipSpeed *= 3;
+                }
+
                 moveDirection.normalize().multiplyScalar(noclipSpeed * deltaTime);
                 player.position.add(moveDirection);
             }
-            
+
             // Reset velocity in noclip mode
             player.velocity.set(0, 0, 0);
             player.onGround = false;
-            
+
             // Return simplified physics results
             return {
-                environment: { inSpace: true, onGround: false, nearest: { planet: null, distance: Infinity } },
-                collision: { onGround: false, collidedPlanet: null }
+                environment: {
+                    inSpace: true,
+                    onGround: false,
+                    nearest: { planet: null, distance: Infinity },
+                    atmosphereZone: 'noclip'
+                },
+                collision: { onGround: false, collidedPlanet: null, surfaceNormal: null },
+                alignment: { aligned: false, upDirection: new THREE.Vector3(0, 1, 0) }
             };
         }
-        
+
         // Regular physics when not in noclip mode
         // All celestial bodies that affect gravity
         const celestialBodies = [...planets];
         if (sun) celestialBodies.push(sun);
-        
-        // Check environment (space or atmosphere)
+
+        // Calculate up direction for alignment
+        const upDirection = this.calculateUpDirection(player.position, planets);
+
+        // Check environment (space or atmosphere) with zones
         const environment = this.checkPlayerEnvironment(player.position, planets);
-        const inSpace = environment.inSpace;
         player.onGround = environment.onGround;
-        
-        // Set drag based on environment
-        const dragCoefficient = inSpace ? this.inSpaceDrag : this.inAtmosphereDrag;
-        
-        // Apply drag to slow down movement
-        player.velocity.multiplyScalar(1 - dragCoefficient);
-        
-        // Apply movement
-        const moveDirection = this.calculateMoveDirection(controls, camera, inSpace, player.onGround);
-        
-        // Normalize and apply movement speed - slower in space for better control
+
+        // Set drag based on environment with smooth transition
+        const spaceDrag = this.inSpaceDrag;
+        const atmosphereDrag = this.inAtmosphereDrag;
+
+        // Calculate a more sophisticated drag coefficient based on environment
+        let dragCoefficient;
+
+        if (environment.inSpace) {
+            // In deep space, minimal drag
+            dragCoefficient = spaceDrag;
+        } else if (environment.inTransition) {
+            // In the transition zone (outer atmosphere), scale drag gradually
+            dragCoefficient = spaceDrag + (atmosphereDrag - spaceDrag) * (1 - environment.transitionFactor);
+        } else if (!environment.onGround) {
+            // In atmosphere but not on ground, scale drag based on altitude
+            // Preserve momentum at higher altitudes in the atmosphere
+            const planetRadius = environment.nearest.planet ?
+                environment.nearest.planet.geometry.parameters.radius : 100;
+
+            // Calculate a normalized distance (0 = at surface, 1 = at atmosphere boundary)
+            const distanceFromSurface = environment.nearest.distance;
+            const normalizedAltitude = Math.min(1, distanceFromSurface / (planetRadius * 0.25));
+
+            // Apply very low drag at high altitudes, increasing as we get closer to surface
+            dragCoefficient = spaceDrag + (atmosphereDrag - spaceDrag) * (1 - normalizedAltitude * 0.9);
+        } else {
+            // On ground, apply normal atmospheric drag
+            dragCoefficient = atmosphereDrag;
+        }
+
+        // Apply drag to slow down movement (but ensure we don't lose too much momentum)
+        player.velocity.multiplyScalar(1 - Math.min(dragCoefficient, 0.05 * deltaTime / 0.016));
+
+        // Apply movement relative to camera orientation
+        const moveDirection = this.calculateMoveDirection(controls, camera, !environment.onGround, environment.onGround);
+
+        // Normalize and apply movement speed - with smooth transition
         if (moveDirection.length() > 0) {
-            const speedMultiplier = inSpace ? 0.5 : 1.0; // Slower movement in space
-            moveDirection.normalize().multiplyScalar(this.moveSpeed * deltaTime * speedMultiplier);
+            const spaceSpeedFactor = 0.5;
+            const groundSpeedFactor = 1.0;
+
+            // Blend speed factors based on transition factor
+            let speedFactor = environment.inTransition ?
+                groundSpeedFactor + (spaceSpeedFactor - groundSpeedFactor) * environment.transitionFactor :
+                environment.inSpace ? spaceSpeedFactor : groundSpeedFactor;
+
+            // Apply sprint multiplier if sprinting and on ground or in atmosphere
+            if (controls.sprint && player.stamina > 0 && !environment.inSpace) {
+                // 1.5x speed on ground while sprinting
+                speedFactor *= 1.5;
+            }
+
+            moveDirection.normalize().multiplyScalar(this.moveSpeed * deltaTime * speedFactor);
             player.velocity.add(moveDirection);
         }
-        
-        // Apply gravity or calculate orbital mechanics
+
+        // Apply gravity with smooth transition
         let gravityVector;
-        
-        if (inSpace) {
-            // In space - use orbital mechanics with gravity from all bodies
+
+        if (environment.inSpace && !environment.inTransition) {
+            // Deep space - full orbital mechanics
             gravityVector = this.getGravityForce(player.position, celestialBodies);
-            gravityVector.multiplyScalar(deltaTime); // Apply over time
+            gravityVector.multiplyScalar(deltaTime);
+        } else if (environment.inTransition) {
+            // Transition zone - blend between orbital mechanics and directional gravity
+            const orbitalGravity = this.getGravityForce(player.position, celestialBodies)
+                .multiplyScalar(deltaTime);
+
+            const dirGravity = environment.nearest.planet ?
+                new THREE.Vector3().subVectors(environment.nearest.planet.position, player.position)
+                    .normalize()
+                    .multiplyScalar(this.gravity * deltaTime) :
+                new THREE.Vector3(0, -this.gravity * deltaTime, 0);
+
+            // Blend between the two types of gravity
+            gravityVector = new THREE.Vector3()
+                .addVectors(
+                    orbitalGravity.multiplyScalar(environment.transitionFactor),
+                    dirGravity.multiplyScalar(1 - environment.transitionFactor)
+                );
         } else {
-            // Near a planet - simplified gravity
-            const directionToCenter = new THREE.Vector3()
-                .subVectors(environment.nearest.planet.position, player.position)
-                .normalize();
-            gravityVector = directionToCenter.multiplyScalar(this.gravity * deltaTime);
+            // In atmosphere - simplified directional gravity
+            if (environment.nearest.planet) {
+                const directionToCenter = new THREE.Vector3()
+                    .subVectors(environment.nearest.planet.position, player.position)
+                    .normalize();
+                gravityVector = directionToCenter.multiplyScalar(this.gravity * deltaTime);
+            } else {
+                // Fallback if no nearest planet
+                gravityVector = new THREE.Vector3(0, -this.gravity * deltaTime, 0);
+            }
         }
-        
-        player.velocity.add(gravityVector);
-        
+
+        // Only apply gravity if not on ground
+        if (!environment.onGround) {
+            player.velocity.add(gravityVector);
+        }
+
         // Apply jetpack force if active
         if (controls.jetpack && player.fuel > 0) {
-            const jetpackDirection = new THREE.Vector3();
-            camera.getWorldDirection(jetpackDirection);
-            
-            // Apply force in look direction
+            let jetpackDirection = new THREE.Vector3();
+
+            // Determine if we're near enough to a planet to use its "up" direction
+            if (environment.nearest.planet && environment.nearest.distance < 500) {
+                // When near a planet, jetpack should propel "up" away from the planet
+                jetpackDirection = this.calculateUpDirection(player.position, planets);
+            } else {
+                // In deep space, use the look direction as before
+                camera.getWorldDirection(jetpackDirection);
+            }
+
+            // Apply force in the determined direction
             const jetpackForce = jetpackDirection.multiplyScalar(this.jetpackForce * deltaTime);
             player.velocity.add(jetpackForce);
-            
+
             // Consume fuel
             player.fuel -= 20 * deltaTime; // Fuel consumption rate
             if (player.fuel < 0) player.fuel = 0;
         }
-        
+
+        // Apply down thrusters if active
+        if (controls.downThrusters && player.fuel > 0) {
+            let downDirection = new THREE.Vector3();
+
+            // Determine if we're near enough to a planet to use its "down" direction
+            if (environment.nearest.planet && environment.nearest.distance < 500) {
+                // When near a planet, down thrusters should propel "down" toward the planet
+                const upDirection = this.calculateUpDirection(player.position, planets);
+                downDirection = upDirection.clone().negate();
+            } else {
+                // In deep space, go opposite to the look direction
+                camera.getWorldDirection(downDirection);
+                downDirection.negate(); // Reverse the direction
+            }
+
+            // Apply force in the downward direction
+            const downForce = downDirection.multiplyScalar(this.jetpackForce * 0.8 * deltaTime);
+            player.velocity.add(downForce);
+
+            // Consume fuel (slightly less than jetpack)
+            player.fuel -= 15 * deltaTime;
+            if (player.fuel < 0) player.fuel = 0;
+        }
+
         // Handle collisions before updating position
         const collision = this.handlePlanetCollisions(
-            player.position, 
-            player.velocity, 
-            planets, 
+            player.position,
+            player.velocity,
+            planets,
             this.collisionRadius
         );
-        
+
         // Update position with velocity
         player.position.add(player.velocity.clone().multiplyScalar(deltaTime));
-        
+
         // Update onGround state based on collision detection
         player.onGround = collision.onGround;
-        
+
+        // Apply additional friction when on ground
+        if (player.onGround) {
+            // Keep some velocity parallel to the surface for sliding effects
+            const normal = collision.surfaceNormal;
+            if (normal) {
+                // Get velocity component along the surface
+                const dot = player.velocity.dot(normal);
+                const normalComponent = normal.clone().multiplyScalar(dot);
+                const tangentialComponent = new THREE.Vector3().subVectors(player.velocity, normalComponent);
+
+                // Apply friction to tangential component
+                tangentialComponent.multiplyScalar(0.9);
+
+                // Remove normal component (prevents pushing into the ground)
+                player.velocity.copy(tangentialComponent);
+            }
+        }
+
+        // Return all the physics results for the game to use
         return {
             environment,
-            collision
+            collision,
+            alignment: {
+                upDirection: upDirection,
+                alignmentDistance: this.alignmentDistance,
+                alignmentSpeed: this.alignmentSpeed
+            }
         };
+    }
+
+    // Handle stamina consumption and regeneration
+    updateStamina(player, controls, deltaTime) {
+        // Consume stamina if sprinting and moving
+        if (controls.sprint && player.stamina > 0) {
+            // Consume stamina while sprinting
+            player.stamina -= player.staminaDrainRate * deltaTime;
+            if (player.stamina < 0) player.stamina = 0;
+        } else if (!controls.sprint || player.stamina <= 0) {
+            // Regenerate stamina when not sprinting
+            player.stamina += player.staminaRechargeRate * deltaTime;
+            if (player.stamina > player.maxStamina) {
+                player.stamina = player.maxStamina;
+            }
+
+            // Disable sprinting if out of stamina
+            if (player.stamina <= 0) {
+                player.isSprinting = false;
+            }
+        }
     }
 
     calculateMoveDirection(controls, camera, inSpace, onGround) {
         const moveDirection = new THREE.Vector3();
-        
+
         // Get camera direction vectors
         const forward = new THREE.Vector3();
         const right = new THREE.Vector3();
         camera.getWorldDirection(forward);
         right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
-        
-        // Flatten forward direction for ground movement
-        if (!inSpace && onGround) {
+
+        // When on ground, movement should be parallel to the surface
+        if (onGround) {
             // Make forward parallel to ground when on a planet
-            forward.y = 0;
-            forward.normalize();
+            const upVector = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+            forward.projectOnPlane(upVector).normalize();
+            right.crossVectors(forward, upVector).normalize();
         }
-        
+
         // Calculate movement based on input
         if (controls.moveForward) moveDirection.add(forward);
         if (controls.moveBackward) moveDirection.sub(forward);
         if (controls.moveRight) moveDirection.add(right);
         if (controls.moveLeft) moveDirection.sub(right);
-        
+
         return moveDirection;
     }
 }
