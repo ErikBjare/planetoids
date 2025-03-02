@@ -28,7 +28,7 @@ Mini Solar System Explorer is a web-based 3D game where players begin on a small
 ## Installation and Running
 
 ### Prerequisites
-- Node.js 16+ and npm 
+- Node.js 16+ and npm
 - A modern web browser with WebGL support
 
 ### Setup
