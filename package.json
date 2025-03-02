@@ -10,16 +10,16 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "three": "^0.160.0",
+    "three": "^0.174.0",
     "eslint": "^9.21.0"
   },
   "devDependencies": {
-    "@types/node": "^20.11.0",
-    "@types/three": "^0.160.0",
-    "@typescript-eslint/eslint-plugin": "^6.19.0",
-    "@typescript-eslint/parser": "^6.19.0",
+    "@types/node": "^22.13.0",
+    "@types/three": "^0.174.0",
+    "@typescript-eslint/eslint-plugin": "^8.0",
+    "@typescript-eslint/parser": "^8.0",
     "globals": "^16.0.0",
     "typescript": "^5.3.3",
-    "vite": "^5.0.10"
+    "vite": "^6.2"
   }
 }
