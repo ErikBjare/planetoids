@@ -1,6 +1,9 @@
 import * as THREE from 'three';
+import { PlanetConfig } from './types';
 
 export class PlanetFactory {
+    planetConfigs: PlanetConfig[];
+
     constructor() {
         this.planetConfigs = [
             {
@@ -56,8 +59,8 @@ export class PlanetFactory {
         ];
     }
 
-    createPlanets(scene) {
-        const planets = [];
+    createPlanets(scene: THREE.Scene): THREE.Mesh[] {
+        const planets: THREE.Mesh[] = [];
 
         // Create planets
         this.planetConfigs.forEach((config, index) => {
@@ -68,7 +71,7 @@ export class PlanetFactory {
         return planets;
     }
 
-    createPlanet(config, index, scene) {
+    createPlanet(config: PlanetConfig, index: number, scene: THREE.Scene): THREE.Mesh {
         // Create planet with improved material for better lighting
         const planetGeometry = new THREE.SphereGeometry(config.size, 32, 32);
         const planetMaterial = new THREE.MeshStandardMaterial({
@@ -131,11 +134,12 @@ export class PlanetFactory {
     }
 
     // Add atmospheric glow to planets
-    addAtmosphere(planet, config) {
+    addAtmosphere(planet: THREE.Mesh, config: PlanetConfig): THREE.Mesh | undefined {
         // Skip for planets without atmosphere
         if (config.features.includes('airless')) return;
 
-        const planetRadius = planet.geometry.parameters.radius;
+        const planetGeometry = planet.geometry as THREE.SphereGeometry;
+        const planetRadius = planetGeometry.parameters.radius;
         console.log(planetRadius);
         const atmosphereSize = planetRadius * 1.25; // 5% larger than the planet + 5m
 
@@ -199,13 +203,14 @@ export class PlanetFactory {
     }
 
     // Add city lights that will be visible only at night
-    addNightLights(planet, config) {
+    addNightLights(planet: THREE.Mesh, config: PlanetConfig): THREE.Mesh | undefined {
         // Skip for planets that don't have cities
         if (config.features.includes('airless') ||
             config.features.includes('icy') ||
-            (config.index > 0 && config.index < 4)) return;
+            (typeof config.index === 'number' && config.index > 0 && config.index < 4)) return;
 
-        const planetRadius = planet.geometry.parameters.radius;
+        const planetGeometry = planet.geometry as THREE.SphereGeometry;
+        const planetRadius = planetGeometry.parameters.radius;
 
         // Create a sphere slightly larger than the planet for night lights
         const lightsGeometry = new THREE.SphereGeometry(planetRadius * 1.001, 32, 32);
@@ -215,6 +220,7 @@ export class PlanetFactory {
         canvas.width = 512;
         canvas.height = 256;
         const ctx = canvas.getContext('2d');
+        if (!ctx) return;
 
         // Fill with black
         ctx.fillStyle = 'black';
@@ -307,7 +313,7 @@ export class PlanetFactory {
         return nightLights;
     }
 
-    addFeatures(planet, config) {
+    addFeatures(planet: THREE.Mesh, config: PlanetConfig): void {
         if (config.features.includes('home')) {
             this.addHomeFeatures(planet);
         } else if (config.features.includes('rocky')) {
@@ -322,10 +328,11 @@ export class PlanetFactory {
     }
 
     // Helper method to position objects on a planet's surface
-    positionOnPlanet(planet, angle1, angle2) {
+    positionOnPlanet(planet: THREE.Mesh, angle1: number, angle2: number): THREE.Vector3 {
         // Position an object on the surface of a planet
         // angle1 is the longitude, angle2 is the latitude
-        const planetRadius = planet.geometry.parameters.radius;
+        const planetGeometry = planet.geometry as THREE.SphereGeometry;
+        const planetRadius = planetGeometry.parameters.radius;
         const x = planetRadius * Math.cos(angle1) * Math.cos(angle2);
         const y = planetRadius * Math.sin(angle2);
         const z = planetRadius * Math.sin(angle1) * Math.cos(angle2);
@@ -334,7 +341,7 @@ export class PlanetFactory {
     }
 
     // Create a basic tree
-    createTree() {
+    createTree(): THREE.Group {
         const treeGroup = new THREE.Group();
 
         // Trunk
@@ -373,8 +380,9 @@ export class PlanetFactory {
     }
 
     // Add features to Home planet
-    addHomeFeatures(planet) {
-        const planetRadius = planet.geometry.parameters.radius;
+    addHomeFeatures(planet: THREE.Mesh): void {
+        const planetGeometry = planet.geometry as THREE.SphereGeometry;
+        const planetRadius = planetGeometry.parameters.radius;
 
         // IMPROVED PLACEMENT: House
         const houseGroup = new THREE.Group();
@@ -497,8 +505,9 @@ export class PlanetFactory {
     }
 
     // Add features to Rocky planet
-    addRockyFeatures(planet) {
-        const planetRadius = planet.geometry.parameters.radius;
+    addRockyFeatures(planet: THREE.Mesh): void {
+        const planetGeometry = planet.geometry as THREE.SphereGeometry;
+        const planetRadius = planetGeometry.parameters.radius;
 
         // Add some rock formations with improved placement
         for (let i = 0; i < 30; i++) {
@@ -538,8 +547,9 @@ export class PlanetFactory {
     }
 
     // Add features to Icy planet
-    addIcyFeatures(planet) {
-        const planetRadius = planet.geometry.parameters.radius;
+    addIcyFeatures(planet: THREE.Mesh): void {
+        const planetGeometry = planet.geometry as THREE.SphereGeometry;
+        const planetRadius = planetGeometry.parameters.radius;
 
         // Add ice formations with improved placement
         for (let i = 0; i < 40; i++) {
@@ -605,14 +615,15 @@ export class PlanetFactory {
     }
 
     // Add features to Desert planet
-    addDesertFeatures(planet) {
-        const planetRadius = planet.geometry.parameters.radius;
+    addDesertFeatures(planet: THREE.Mesh): void {
+        const planetGeometry = planet.geometry as THREE.SphereGeometry;
+        const planetRadius = planetGeometry.parameters.radius;
 
         // IMPROVED: Add sand dunes
         for (let i = 0; i < 20; i++) {
             const duneSize = 10 + Math.random() * 20;
             const duneGeometry = new THREE.SphereGeometry(duneSize, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2);
-            const duneMaterial = new THREE.MeshLambertMaterial({
+            const duneMaterial = new THREE.MeshStandardMaterial({
                 color: 0xe6c998,
                 roughness: 1.0
             });
@@ -760,8 +771,9 @@ export class PlanetFactory {
     }
 
     // Add features to Mysterious planet
-    addMysteriousFeatures(planet) {
-        const planetRadius = planet.geometry.parameters.radius;
+    addMysteriousFeatures(planet: THREE.Mesh): void {
+        const planetGeometry = planet.geometry as THREE.SphereGeometry;
+        const planetRadius = planetGeometry.parameters.radius;
 
         // IMPROVED: Add alien structures
         for (let i = 0; i < 10; i++) {
@@ -769,7 +781,7 @@ export class PlanetFactory {
 
             const height = 15 + Math.random() * 20;
             const baseGeometry = new THREE.CylinderGeometry(5, 8, height, 6);
-            const baseMaterial = new THREE.MeshLambertMaterial({
+            const baseMaterial = new THREE.MeshStandardMaterial({
                 color: 0x2a2a4a,
                 metalness: 0.7,
                 roughness: 0.2,
@@ -884,9 +896,10 @@ export class PlanetFactory {
     }
 
     // IMPROVED: Add an upgrade station to a planet using the direction-based positioning
-    addImprovedUpgradeStation(planet, direction, type = 'default') {
-        const planetRadius = planet.geometry.parameters.radius;
-        let stationGroup = new THREE.Group();
+    addImprovedUpgradeStation(planet: THREE.Mesh, direction: THREE.Vector3, type = 'default'): THREE.Group {
+        const planetGeometry = planet.geometry as THREE.SphereGeometry;
+        const planetRadius = planetGeometry.parameters.radius;
+        const stationGroup = new THREE.Group();
 
         if (type === 'default' || type === 'home') {
             // Basic blue upgrade station
@@ -972,7 +985,7 @@ export class PlanetFactory {
 
             // Solar panels
             const panelGeometry = new THREE.BoxGeometry(8, 0.5, 8);
-            const panelMaterial = new THREE.MeshLambertMaterial({
+            const panelMaterial = new THREE.MeshStandardMaterial({
                 color: 0x3162e0,
                 metalness: 0.8,
                 roughness: 0.2,
@@ -989,7 +1002,7 @@ export class PlanetFactory {
         } else if (type === 'mysterious') {
             // Mysterious planet alien temple
             const baseGeometry = new THREE.BoxGeometry(30, 10, 30);
-            const baseMaterial = new THREE.MeshLambertMaterial({
+            const baseMaterial = new THREE.MeshStandardMaterial({
                 color: 0x28203c,
                 metalness: 0.6,
                 roughness: 0.2,
@@ -1014,7 +1027,7 @@ export class PlanetFactory {
 
             // Temple top pyramid
             const pyramidGeometry = new THREE.ConeGeometry(15, 20, 4);
-            const pyramidMaterial = new THREE.MeshLambertMaterial({
+            const pyramidMaterial = new THREE.MeshStandardMaterial({
                 color: 0x3a2f52,
                 metalness: 0.7,
                 roughness: 0.1,
@@ -1076,9 +1089,10 @@ export class PlanetFactory {
     }
 
     // Original method kept for backward compatibility
-    addUpgradeStation(planet, angle1, angle2, type = 'default') {
+    addUpgradeStation(planet: THREE.Mesh, angle1: number, angle2: number, type = 'default'): THREE.Group {
         // Convert angles to direction and use improved method
-        const planetRadius = planet.geometry.parameters.radius;
+        const planetGeometry = planet.geometry as THREE.SphereGeometry;
+        const planetRadius = planetGeometry.parameters.radius;
         const x = Math.cos(angle1) * Math.cos(angle2);
         const y = Math.sin(angle2);
         const z = Math.sin(angle1) * Math.cos(angle2);

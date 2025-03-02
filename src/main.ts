@@ -1,11 +1,24 @@
 import * as THREE from 'three';
-import { World } from './world.js';
-import { Physics } from './physics.js';
-import { UI } from './ui.js';
-import { PlayerController } from './player.js';
+import { World } from './world';
+import { Physics } from './physics';
+import { UI } from './ui';
+import { PlayerController } from './player';
+import { GameState, ControlsState, Upgrade } from './types';
 
 // Main game engine
 class Game {
+    scene: THREE.Scene;
+    camera: THREE.PerspectiveCamera;
+    renderer: THREE.WebGLRenderer;
+    gameState: GameState;
+    ui: UI;
+    physics: Physics;
+    controls: ControlsState;
+    clock: THREE.Clock;
+    deltaTime: number;
+    world: World;
+    player: PlayerController;
+
     constructor() {
         // Three.js basics
         this.scene = new THREE.Scene();
@@ -88,7 +101,7 @@ class Game {
         this.animate();
     }
 
-    setupEventListeners() {
+    setupEventListeners(): void {
         // Keyboard controls
         document.addEventListener('keydown', (event) => {
             this.handleKeyDown(event);
@@ -106,7 +119,7 @@ class Game {
         });
     }
 
-    handleKeyDown(event) {
+    handleKeyDown(event: KeyboardEvent): void {
         switch (event.code) {
         case 'KeyW':
             this.controls.moveForward = true;
@@ -163,7 +176,7 @@ class Game {
         }
     }
 
-    handleKeyUp(event) {
+    handleKeyUp(event: KeyboardEvent): void {
         switch (event.code) {
         case 'KeyW':
             this.controls.moveForward = false;
@@ -186,9 +199,7 @@ class Game {
             this.controls.sprint = false;
             this.player.isSprinting = false;
             this.controls.downThrusters = false;
-            if (typeof this.player.setDownThrustersActive === 'function') {
-                this.player.setDownThrustersActive(false);
-            }
+            this.player.setDownThrustersActive(false);
             break;
         case 'Space':
             this.controls.jump = false;
@@ -198,7 +209,7 @@ class Game {
         }
     }
 
-    cycleCameraMode() {
+    cycleCameraMode(): void {
         // Cycle between camera modes: first-person -> third-person -> scope -> first-person
         const currentMode = this.player.cameraMode;
         let nextMode;
@@ -221,7 +232,7 @@ class Game {
         this.ui.showMessage(`Camera mode: ${nextMode}`);
     }
 
-    jump() {
+    jump(): void {
         if (this.player.onGround) {
             // Get the up direction based on planet alignment
             const upDir = this.physics.calculateUpDirection(this.player.position, this.world.planets);
@@ -233,7 +244,7 @@ class Game {
         }
     }
 
-    tryInteract() {
+    tryInteract(): void {
         // Only interact if near an interactable object
         if (!this.gameState.nearInteractable) return;
 
@@ -259,14 +270,14 @@ class Game {
         }
     }
 
-    toggleUpgradeMenu() {
+    toggleUpgradeMenu(): void {
         // We'll use our improved UI now
         // this.ui.toggleUpgradeMenu();
     }
 
-    showUpgrades(planetIndex) {
+    showUpgrades(planetIndex: number): void {
         // Show available upgrades for this planet
-        const upgrades = {
+        const upgrades: Record<number, Upgrade[]> = {
             0: [
                 { name: 'Basic Scanner', cost: 50, effect: 'Allows you to detect Rocky planet' },
                 { name: 'Improved Jetpack', cost: 100, effect: 'Increases jetpack power by 20%' }
@@ -298,7 +309,7 @@ class Game {
         );
     }
 
-    purchaseUpgrade(upgrade) {
+    purchaseUpgrade(upgrade: Upgrade, planetIndex: number): void {
         // Apply the upgrade effect
         this.gameState.discoveryPoints -= upgrade.cost;
 
@@ -347,12 +358,12 @@ class Game {
         this.updateUI();
     }
 
-    addDiscoveryPoints(points) {
+    addDiscoveryPoints(points: number): void {
         this.gameState.discoveryPoints += points;
         this.updateUI();
     }
 
-    updateUI() {
+    updateUI(): void {
         // Update UI with current stats
         const nearest = this.physics.getNearestPlanet(this.player.position, this.world.planets);
 
@@ -364,7 +375,7 @@ class Game {
         if (nearest.planet && nearest.distance < 500) {
             // Calculate time based on player position relative to sun
             // Get vectors from player to sun and player to planet
-            const sunDirection = new THREE.Vector3().subVectors(this.world.sun.position, this.player.position).normalize();
+            const sunDirection = new THREE.Vector3().subVectors(this.world.sun?.position || new THREE.Vector3(), this.player.position).normalize();
             const planetDirection = new THREE.Vector3().subVectors(nearest.planet.position, this.player.position).normalize();
 
             // The "up" vector for the player relative to the planet is opposite to planet direction
@@ -393,7 +404,8 @@ class Game {
         }
 
         // Get the player's orientation vectors
-        let bodyUpDirection, lookDirection;
+        let bodyUpDirection: THREE.Vector3;
+        let lookDirection: THREE.Vector3;
 
         if (this.player) {
             // Get body up direction (from body quaternion)
@@ -426,7 +438,7 @@ class Game {
         });
     }
 
-    checkForInteractables() {
+    checkForInteractables(): void {
         // Distance to check for interactables
         const interactionDistance = 20;
         let nearestInteractable = null;
@@ -458,19 +470,12 @@ class Game {
         this.ui.setInteractionPrompt(false);
     }
 
-    setupNetworking() {
+    setupNetworking(): void {
         // Simple stub for future WebSocket implementation
-        this.networkReady = false;
-
-        // In a real implementation, we would connect to a WebSocket server here
-        // this.socket = new WebSocket('ws://your-game-server.com');
-        // this.socket.onopen = () => { this.networkReady = true; };
-        // etc.
-
         console.log('Network functionality would be initialized here');
     }
 
-    updatePlayer() {
+    updatePlayer(): void {
         // Update player physics using the Physics class
         const physicsResults = this.physics.updatePlayerPhysics(
             this.player,
@@ -497,12 +502,6 @@ class Game {
 
             // Force camera update with the latest orientations
             this.player.updateCamera(this.deltaTime);
-
-            // ADDED FOR DEBUGGING:
-            // Display alignment strength in console to debug orientation issues
-            console.warn(`Alignment active - Up: ${physicsResults.alignment.upDirection.y.toFixed(2)},
-                         Strength: ${this.player.alignmentStrength.toFixed(2)},
-                         Factor: ${this.player.alignmentNeeded.toFixed(2)}`);
         }
 
         // Update player controller
@@ -524,7 +523,7 @@ class Game {
         this.updateUI();
     }
 
-    checkPlanetDiscovery(physicsResults) {
+    checkPlanetDiscovery(physicsResults: any): void {
         // Check if we've landed on a planet
         if (physicsResults.collision && physicsResults.collision.collidedPlanet) {
             const planet = physicsResults.collision.collidedPlanet;
@@ -557,7 +556,7 @@ class Game {
         }
     }
 
-    animate() {
+    animate(): void {
         requestAnimationFrame(() => this.animate());
 
         // Calculate delta time

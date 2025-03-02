@@ -1,9 +1,10 @@
 import * as THREE from 'three';
-import { PlanetFactory } from './planets.js';
-import { CelestialFactory } from './celestial.js';
+import { PlanetFactory } from './planets';
+import { CelestialFactory } from './celestial';
+import { GameObject, UpgradeLevels } from './types';
 
 // Factory function to create a game object
-function createGameObject(params = {}) {
+function createGameObject(params: Partial<GameObject> = {}): GameObject {
     return {
         id: params.id || `obj_${Math.floor(Math.random() * 100000)}`,
         type: params.type || 'generic',
@@ -20,7 +21,7 @@ function createGameObject(params = {}) {
         update: params.update || (() => {}),
 
         // Method to add this object to a scene or parent
-        addToScene: function(scene) {
+        addToScene: function(scene: THREE.Scene | THREE.Object3D): GameObject {
             if (this.mesh) {
                 scene.add(this.mesh);
 
@@ -36,7 +37,7 @@ function createGameObject(params = {}) {
 
                 // Add children
                 this.children.forEach(child => {
-                    if (child.addToScene) {
+                    if (child.addToScene && this.mesh) {
                         child.parent = this;
                         child.addToScene(this.mesh);
                     }
@@ -48,10 +49,25 @@ function createGameObject(params = {}) {
 }
 
 export class World {
-    constructor(scene) {
+    scene: THREE.Scene;
+    planets: THREE.Mesh[];
+    sun: THREE.Mesh | null;
+    starfield: THREE.Points | null;
+    nebula: THREE.Points | null;
+    asteroidBelt: THREE.Group | null;
+    unlocked: boolean[];
+    upgrades: UpgradeLevels;
+    gameObjects: Record<string, GameObject>;
+    planetFactory: PlanetFactory;
+    celestialFactory: CelestialFactory;
+
+    constructor(scene: THREE.Scene) {
         this.scene = scene;
         this.planets = [];
         this.sun = null;
+        this.starfield = null;
+        this.nebula = null;
+        this.asteroidBelt = null;
         this.unlocked = [true, false, false, false, false]; // Home planet is unlocked by default
         this.upgrades = {
             jetpackPower: 10,
@@ -73,7 +89,7 @@ export class World {
     }
 
     // Helper function to get the base atmosphere color for a planet
-    getBaseAtmosphereColor(planet) {
+    getBaseAtmosphereColor(planet: THREE.Mesh | null): THREE.Color {
         // Determine atmosphere color based on planet type
         if (!planet || !planet.userData) {
             return new THREE.Color(0x4f99e8); // Default blue if no planet data
@@ -98,7 +114,7 @@ export class World {
     }
 
     // Register a game object for easy lookup
-    registerGameObject(gameObject) {
+    registerGameObject(gameObject: GameObject): GameObject {
         if (gameObject && gameObject.id) {
             this.gameObjects[gameObject.id] = gameObject;
         }
@@ -106,23 +122,23 @@ export class World {
     }
 
     // Find a game object by ID
-    getGameObject(id) {
+    getGameObject(id: string): GameObject | null {
         return this.gameObjects[id] || null;
     }
 
     // Find game objects by type
-    getGameObjectsByType(type) {
+    getGameObjectsByType(type: string): GameObject[] {
         return Object.values(this.gameObjects).filter(obj => obj.type === type);
     }
 
     // Create a standard game object and register it
-    createObject(params) {
+    createObject(params: Partial<GameObject>): GameObject {
         const gameObject = createGameObject(params);
         this.registerGameObject(gameObject);
         return gameObject;
     }
 
-    createSolarSystem() {
+    createSolarSystem(): void {
         // Create sun
         this.sun = this.celestialFactory.createSun(this.scene);
 
@@ -158,7 +174,7 @@ export class World {
                     const stationObject = this.createObject({
                         id: `upgrade_station_${planet.userData.name}`,
                         type: 'upgradeStation',
-                        mesh: child,
+                        mesh: child as THREE.Mesh | THREE.Group,
                         parent: planetObject,
                         userData: {
                             planetIndex: planet.userData.index,
@@ -176,7 +192,7 @@ export class World {
         });
     }
 
-    updatePlanets(deltaTime) {
+    updatePlanets(deltaTime: number): void {
         // Get player position if available
         const playerPosition = window.game?.player?.position;
 
@@ -203,7 +219,9 @@ export class World {
         }
 
         // Update asteroid belt
-        this.celestialFactory.updateAsteroidBelt(this.asteroidBelt, deltaTime);
+        if (this.asteroidBelt) {
+            this.celestialFactory.updateAsteroidBelt(this.asteroidBelt, deltaTime);
+        }
 
         // Update any custom game objects
         Object.values(this.gameObjects).forEach(obj => {
@@ -214,7 +232,7 @@ export class World {
     }
 
     // Handle day/night cycle for a planet
-    updateDayNightCycle(planet, deltaTime, playerPosition) {
+    updateDayNightCycle(planet: THREE.Mesh, deltaTime: number, playerPosition?: THREE.Vector3): void {
         // Skip if the planet doesn't have day/night cycle data
         if (!planet.userData.dayLength) return;
 
@@ -250,7 +268,8 @@ export class World {
         if (playerPosition) {
             // Calculate if player is close enough to the planet to have a unique perspective
             const distanceToPlanet = playerPosition.distanceTo(planet.position);
-            const planetRadius = planet.geometry.parameters.radius;
+            const planetGeometry = planet.geometry as THREE.SphereGeometry;
+            const planetRadius = planetGeometry.parameters.radius;
 
             // If player is close to the planet, calculate custom day factor
             if (distanceToPlanet < planetRadius * 3) {
@@ -261,7 +280,7 @@ export class World {
 
                 // Vector from player to sun
                 const playerToSun = new THREE.Vector3()
-                    .subVectors(this.sun.position, playerPosition)
+                    .subVectors(this.sun?.position || new THREE.Vector3(1000, 0, 0), playerPosition)
                     .normalize();
 
                 // The "up" vector for the player is opposite the gravity direction
@@ -276,14 +295,16 @@ export class World {
         // Update atmosphere visibility and glow based on day/night from player's perspective
         planet.children.forEach(child => {
             // Handle atmosphere
-            if (child.userData.isAtmosphere) {
+            if (child.userData?.isAtmosphere) {
                 // Make atmosphere more visible at sunset/sunrise
                 const atmosphereOpacity = 0.3 + Math.max(0, 0.4 * (1 - Math.abs(playerDayFactor)));
 
                 // Change atmosphere color based on time of day from player's perspective
-                if (child.material && child.material.uniforms) {
+                const childMesh = child as THREE.Mesh;
+                const material = childMesh.material as THREE.ShaderMaterial;
+                if (material && material.uniforms) {
                     // Adjust glow intensity
-                    const uniforms = child.material.uniforms;
+                    const uniforms = material.uniforms;
 
                     // Determine the appropriate atmosphere color based on time of day
                     if (playerDayFactor > -0.3 && playerDayFactor < 0.3) {
@@ -307,18 +328,19 @@ export class World {
             }
 
             // Handle night lights - using player's perspective for better immersion
-            if (child.userData.isNightLights) {
+            if (child.userData?.isNightLights) {
                 // Check if it's night time from the player's perspective
                 const isNightVisible = playerDayFactor < 0.3; // Lights start to appear at dusk
 
                 // Show lights at night, with increasing intensity as it gets darker
                 child.visible = isNightVisible;
 
-                if (isNightVisible && child.material) {
+                const childMesh = child as THREE.Mesh;
+                if (isNightVisible && childMesh.material) {
                     // Adjust opacity based on how dark it is from the player's perspective
                     // Fully visible at night, fading during dusk/dawn
                     const opacity = Math.min(1, (0.3 - playerDayFactor) * 3);
-                    child.material.opacity = opacity * 0.9;
+                    (childMesh.material as THREE.Material).opacity = opacity * 0.9;
                 }
 
                 // Always rotate lights with the planet
@@ -328,20 +350,22 @@ export class World {
 
         // Update material properties based on the general planet day/night cycle
         // (not player specific, as this affects the whole planet)
-        if (planet.material) {
+        const planetMesh = planet as THREE.Mesh;
+        if (planetMesh.material) {
             // Adjust emissive intensity based on day/night
             // Slightly more self-illumination at night for visibility
             const nightGlow = Math.max(0, -planetDayFactor * 0.05);
-            planet.material.emissiveIntensity = 0.1 + nightGlow;
+            (planetMesh.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.1 + nightGlow;
         }
     }
 
-    getNearestPlanet(position) {
-        let nearestPlanet = null;
+    getNearestPlanet(position: THREE.Vector3): { planet: THREE.Mesh | null; distance: number } {
+        let nearestPlanet: THREE.Mesh | null = null;
         let minDistance = Infinity;
 
         this.planets.forEach(planet => {
-            const distance = position.distanceTo(planet.position) - planet.geometry.parameters.radius;
+            const planetGeometry = planet.geometry as THREE.SphereGeometry;
+            const distance = position.distanceTo(planet.position) - planetGeometry.parameters.radius;
             if (distance < minDistance) {
                 minDistance = distance;
                 nearestPlanet = planet;
@@ -351,7 +375,7 @@ export class World {
         return { planet: nearestPlanet, distance: minDistance };
     }
 
-    isUpgradeStationNearby(position, range = 20) {
+    isUpgradeStationNearby(position: THREE.Vector3, range = 20): number {
         // Check if player is near an upgrade station
         for (const planet of this.planets) {
             // Only check unlocked planets
@@ -376,7 +400,7 @@ export class World {
         return -1; // No station nearby
     }
 
-    unlockPlanet(index) {
+    unlockPlanet(index: number): boolean {
         if (index >= 0 && index < this.unlocked.length) {
             this.unlocked[index] = true;
             return true;
@@ -384,14 +408,14 @@ export class World {
         return false;
     }
 
-    getAllCelestialBodies() {
+    getAllCelestialBodies(): THREE.Object3D[] {
         const bodies = [...this.planets];
         if (this.sun) bodies.push(this.sun);
         return bodies;
     }
 
     // Helper to import objects from external modules
-    importGameObject(objectModule, params = {}) {
+    importGameObject(objectModule: any, params: Record<string, any> = {}): GameObject | null {
         if (typeof objectModule.create === 'function') {
             const object = objectModule.create(params);
             this.registerGameObject(object);

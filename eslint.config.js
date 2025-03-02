@@ -1,34 +1,43 @@
-import globals from 'globals';
+import globals from "globals";
+import tseslint from "@typescript-eslint/eslint-plugin";
+import tsParser from "@typescript-eslint/parser";
 
 export default [
   {
-    files: ['**/*.js'],
+    files: ["**/*.ts"],
+    ignores: ["vite.config.ts"],
     languageOptions: {
-      ecmaVersion: 'latest',
-      sourceType: 'module',
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: "latest",
+        sourceType: "module",
+        project: "./tsconfig.json",
+      },
       globals: {
-        ...globals.browser,  // Properly include all browser globals
-        ...globals.es2021,   // Include ES2021 globals
-        THREE: 'readonly'    // Custom globals from original config
+        ...globals.browser,
+        ...globals.es2020,
+        THREE: "readonly"
       }
     },
+    plugins: {
+      "@typescript-eslint": tseslint
+    },
     rules: {
-      // Recommended rules (equivalent to extends: 'eslint:recommended')
-      'no-const-assign': 'error',
-      'no-this-before-super': 'error',
-      'no-undef': 'error',
-      'no-unreachable': 'error',
-      'no-unused-vars': ['warn'],
-      'constructor-super': 'error',
-      'valid-typeof': 'error',
-
-      // Custom rules from original config
-      'linebreak-style': ['error', 'unix'],
-      'quotes': ['error', 'single', { 'allowTemplateLiterals': true }],
-      'semi': ['error', 'always'],
-      'no-multiple-empty-lines': ['error', { 'max': 2 }],
-      'no-trailing-spaces': 'error',
-      'eqeqeq': ['error', 'always']
+      "no-const-assign": "error",
+      "no-this-before-super": "error",
+      "no-undef": "error",
+      "no-unreachable": "error",
+      "constructor-super": "error",
+      "valid-typeof": "error",
+      "linebreak-style": ["error", "unix"],
+      "quotes": ["error", "single", { "allowTemplateLiterals": true }],
+      "semi": ["error", "always"],
+      "no-multiple-empty-lines": ["error", { "max": 2 }],
+      "no-trailing-spaces": "error",
+      "eqeqeq": ["error", "always"],
+      "@typescript-eslint/explicit-function-return-type": "off",
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-unused-vars": "warn"
     }
   }
 ];

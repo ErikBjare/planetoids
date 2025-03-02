@@ -1,7 +1,16 @@
 import * as THREE from 'three';
+import { UIStats, Message } from './types';
 
 export class UI {
-    constructor(game) {
+    game: any;
+    elements: Record<string, HTMLElement | null>;
+    container: HTMLElement | null;
+    messageQueue: Message[];
+    isShowingMessage: boolean;
+    staminaTimerId: number | null;
+    lastStaminaPercent: number;
+
+    constructor(game: any) {
         this.game = game;
         this.elements = {};
 
@@ -20,7 +29,7 @@ export class UI {
         this.lastStaminaPercent = 1.0;
     }
 
-    initializeUIElements() {
+    initializeUIElements(): void {
         // Get references to all UI elements
         this.elements.debugPanel = document.getElementById('ui');
         this.elements.dashboard = document.getElementById('dashboard');
@@ -32,7 +41,7 @@ export class UI {
         this.elements.upgradeMenu = document.getElementById('upgrades');
     }
 
-    showMessage(message, duration = 2000) {
+    showMessage(message: string, duration = 2000): void {
         // Add message to queue
         this.messageQueue.push({
             text: message,
@@ -45,7 +54,7 @@ export class UI {
         }
     }
 
-    showNextMessage() {
+    showNextMessage(): void {
         // Check if there are messages in the queue
         if (this.messageQueue.length === 0) {
             this.isShowingMessage = false;
@@ -54,6 +63,8 @@ export class UI {
 
         // Get the next message
         const nextMessage = this.messageQueue.shift();
+        if (!nextMessage) return;
+
         this.isShowingMessage = true;
 
         // Create message element
@@ -75,33 +86,37 @@ export class UI {
             border-radius: 5px;
             z-index: 100;
         `;
-        this.container.appendChild(msgElement);
+        if (this.container) {
+            this.container.appendChild(msgElement);
+        }
 
         // Remove message after duration
         setTimeout(() => {
-            this.container.removeChild(msgElement);
+            if (this.container && this.container.contains(msgElement)) {
+                this.container.removeChild(msgElement);
+            }
             // Show next message if there is one
             this.showNextMessage();
         }, nextMessage.duration);
     }
 
-    setInteractionPrompt(show) {
+    setInteractionPrompt(show: boolean): void {
         if (this.elements.interactionPrompt) {
             this.elements.interactionPrompt.style.display = show ? 'block' : 'none';
         }
     }
 
-    setCrosshairVisible(visible) {
+    setCrosshairVisible(visible: boolean): void {
         if (this.elements.crosshair) {
             this.elements.crosshair.style.display = visible ? 'block' : 'none';
         }
     }
 
-    updateStats(stats) {
+    updateStats(stats: UIStats): void {
         // Helper function to safely update element text
-        const safeUpdateText = (id, text) => {
+        const safeUpdateText = (id: string, text: string | number) => {
             const element = document.getElementById(id);
-            if (element) element.textContent = text;
+            if (element) element.textContent = String(text);
         };
 
         // Update debug panel information
@@ -137,7 +152,7 @@ export class UI {
                 const fuelPercent = stats.fuel / 100; // Assuming max fuel is 100
                 const circumference = 2 * Math.PI * 45;
                 const offset = circumference * (1 - fuelPercent);
-                fuelCircle.setAttribute('stroke-dashoffset', offset);
+                fuelCircle.setAttribute('stroke-dashoffset', offset.toString());
 
                 // Change color based on fuel level
                 if (fuelPercent > 0.6) {
@@ -160,7 +175,7 @@ export class UI {
                 // Full circle circumference is 2πr = 2π * 45 ≈ 282.7
                 const circumference = 2 * Math.PI * 45;
                 const offset = circumference * (1 - staminaPercent);
-                staminaCircle.setAttribute('stroke-dashoffset', offset);
+                staminaCircle.setAttribute('stroke-dashoffset', offset.toString());
 
                 // Change color based on stamina level
                 if (staminaPercent > 0.6) {
@@ -183,12 +198,12 @@ export class UI {
                     this.lastStaminaPercent = staminaPercent;
 
                     // Clear any existing timer
-                    if (this.staminaTimerId) {
+                    if (this.staminaTimerId !== null) {
                         clearTimeout(this.staminaTimerId);
                     }
 
                     // Set new timer to hide wheel after 2 seconds
-                    this.staminaTimerId = setTimeout(() => {
+                    this.staminaTimerId = window.setTimeout(() => {
                         this.hideStaminaWheel();
                     }, 2000);
                 }
@@ -222,30 +237,34 @@ export class UI {
     }
 
     // Show/hide stamina wheel
-    showStaminaWheel() {
+    showStaminaWheel(): void {
         if (this.elements.staminaWheel) {
             this.elements.staminaWheel.style.display = 'block';
         }
     }
 
-    hideStaminaWheel() {
+    hideStaminaWheel(): void {
         if (this.elements.staminaWheel) {
             this.elements.staminaWheel.style.display = 'none';
         }
     }
 
-    updateOrientationDisplays(bodyUpDirection, lookDirection) {
+    updateOrientationDisplays(bodyUpDirection: THREE.Vector3, lookDirection: THREE.Vector3): void {
         // Update body orientation display
         this.updateArrow('body-up', bodyUpDirection, 1, 'left');
-        this.updateArrow('body-forward', new THREE.Vector3(0, 0, -1).applyQuaternion(window.game?.player?.bodyQuaternion || new THREE.Quaternion()), 1, 'top');
+        this.updateArrow('body-forward', new THREE.Vector3(0, 0, -1).applyQuaternion(
+            window.game?.player?.bodyQuaternion || new THREE.Quaternion()
+        ), 1, 'top');
 
         // Update head/view direction display
         this.updateArrow('look-direction', lookDirection, 1, 'top');
-        this.updateArrow('look-up', new THREE.Vector3(0, 1, 0).applyQuaternion(window.game?.player?.camera?.quaternion || new THREE.Quaternion()), 1, 'left');
+        this.updateArrow('look-up', new THREE.Vector3(0, 1, 0).applyQuaternion(
+            window.game?.player?.camera?.quaternion || new THREE.Quaternion()
+        ), 1, 'left');
     }
 
     // Updated arrow method with direction parameter
-    updateArrow(prefix, direction, magnitude, arrowType) {
+    updateArrow(prefix: string, direction: THREE.Vector3, magnitude: number, arrowType: 'top' | 'left'): void {
         // Get arrow element
         const arrow = document.getElementById(`${prefix}-arrow`);
         if (!arrow) return;
@@ -294,7 +313,7 @@ export class UI {
         }
     }
 
-    updateArrows(prefix, direction, magnitude) {
+    updateArrows(prefix: string, direction: THREE.Vector3, magnitude: number): void {
         // Get arrow elements
         const xArrow = document.getElementById(`${prefix}-x-arrow`);
         const yArrow = document.getElementById(`${prefix}-y-arrow`);
@@ -342,7 +361,7 @@ export class UI {
         }
     }
 
-    updateCameraMode(mode) {
+    updateCameraMode(mode: string): void {
         if (!this.elements.cameraMode) return;
 
         let modeText = 'Unknown';
@@ -355,7 +374,12 @@ export class UI {
         this.elements.cameraMode.textContent = `Camera: ${modeText}`;
     }
 
-    showUpgradeMenu(planetIndex, upgrades, discoveryPoints, onPurchase) {
+    showUpgradeMenu(
+        planetIndex: number,
+        upgrades: Array<{name: string; cost: number; effect: string}>,
+        discoveryPoints: number,
+        onPurchase: (upgrade: {name: string; cost: number; effect: string}, planetIndex: number) => void
+    ): void {
         const menu = this.elements.upgradeMenu;
         if (!menu) return;
 
@@ -377,6 +401,7 @@ export class UI {
 
         // Add upgrade options
         const optionsContainer = menu.querySelector('#upgrade-options');
+        if (!optionsContainer) return;
 
         upgrades.forEach((upgrade, index) => {
             const option = document.createElement('div');

@@ -1,6 +1,24 @@
 import * as THREE from 'three';
+import { PhysicsResult, EnvironmentResult, CollisionResult } from './types';
 
 export class Physics {
+    gravity: number;
+    jumpForce: number;
+    moveSpeed: number;
+    jetpackForce: number;
+    dragCoefficient: number;
+    inSpaceDrag: number;
+    inAtmosphereDrag: number;
+    collisionRadius: number;
+    gravitationalConstant: number;
+    alignmentSpeed: number;
+    alignmentDistance: number;
+    atmosphereRatio: number;
+    outerAtmosphereRatio: number;
+    lastZone: string | null;
+    zoneHysteresis: number;
+    zoneSwitchDelay: number;
+
     constructor() {
         this.gravity = 9.8;
         this.jumpForce = 10;
@@ -27,7 +45,7 @@ export class Physics {
     }
 
     // Check if player is on ground or in space with more nuanced zones and hysteresis
-    checkPlayerEnvironment(playerPosition, planets) {
+    checkPlayerEnvironment(playerPosition: THREE.Vector3, planets: THREE.Mesh[]): EnvironmentResult {
         const nearest = this.getNearestPlanet(playerPosition, planets);
 
         if (!nearest.planet) return {
@@ -37,7 +55,7 @@ export class Physics {
             atmosphereZone: 'deep-space'
         };
 
-        const planetRadius = nearest.planet.geometry.parameters.radius;
+        const planetRadius = (nearest.planet.geometry as THREE.SphereGeometry).parameters.radius;
         const atmosphereThreshold = planetRadius * this.atmosphereRatio;
         const outerAtmosphereThreshold = planetRadius * this.outerAtmosphereRatio;
 
@@ -118,12 +136,13 @@ export class Physics {
     }
 
     // Get nearest planet and distance to its surface
-    getNearestPlanet(position, planets) {
-        let nearestPlanet = null;
+    getNearestPlanet(position: THREE.Vector3, planets: THREE.Mesh[]): { planet: THREE.Mesh | null; distance: number } {
+        let nearestPlanet: THREE.Mesh | null = null;
         let minDistance = Infinity;
 
         planets.forEach(planet => {
-            const distance = position.distanceTo(planet.position) - planet.geometry.parameters.radius;
+            const planetGeometry = planet.geometry as THREE.SphereGeometry;
+            const distance = position.distanceTo(planet.position) - planetGeometry.parameters.radius;
             if (distance < minDistance) {
                 minDistance = distance;
                 nearestPlanet = planet;
@@ -134,13 +153,17 @@ export class Physics {
     }
 
     // Calculate gravity from all celestial bodies
-    getGravityForce(position, celestialBodies, mass = 1) {
+    getGravityForce(position: THREE.Vector3, celestialBodies: THREE.Object3D[], mass = 1): THREE.Vector3 {
         const gravityVector = new THREE.Vector3(0, 0, 0);
 
         // Process each celestial body (sun and planets)
         celestialBodies.forEach(body => {
-            // Skip if body has no position or no radius (shouldn't happen, but just in case)
-            if (!body.position || !body.geometry?.parameters?.radius) return;
+            // Skip if body has no position (shouldn't happen, but just in case)
+            if (!body.position) return;
+
+            // Check if body is a Mesh with geometry
+            const bodyMesh = body as THREE.Mesh;
+            if (!bodyMesh.geometry || !(bodyMesh.geometry as THREE.SphereGeometry)?.parameters?.radius) return;
 
             const direction = new THREE.Vector3().subVectors(body.position, position).normalize();
             const distance = position.distanceTo(body.position);
@@ -153,12 +176,12 @@ export class Physics {
             if (body.userData?.isSun) {
                 bodyMass = 50; // Sun has special mass
             } else {
-                bodyMass = body.geometry.parameters.radius;
+                bodyMass = (bodyMesh.geometry as THREE.SphereGeometry).parameters.radius;
             }
 
             // Gravity falls off with square of distance
             // Limit minimum distance to prevent extreme forces
-            const clampedDistance = Math.max(distance, body.geometry.parameters.radius * 0.5);
+            const clampedDistance = Math.max(distance, (bodyMesh.geometry as THREE.SphereGeometry).parameters.radius * 0.5);
             const force = this.gravitationalConstant * (bodyMass * mass) / (clampedDistance * clampedDistance);
 
             // Apply softer gravity curves for better gameplay
@@ -171,10 +194,15 @@ export class Physics {
     }
 
     // Handle collisions with planets - improved for proper landing
-    handlePlanetCollisions(playerPosition, playerVelocity, planets, collisionRadius) {
+    handlePlanetCollisions(
+        playerPosition: THREE.Vector3,
+        playerVelocity: THREE.Vector3,
+        planets: THREE.Mesh[],
+        collisionRadius: number
+    ): CollisionResult {
         let onGround = false;
-        let collidedPlanet = null;
-        let surfaceNormal = null;
+        let collidedPlanet: THREE.Mesh | null = null;
+        let surfaceNormal: THREE.Vector3 | null = null;
 
         // Reduce collision radius for more precise ground detection
         const groundCollisionRadius = 0.5; // Reduced from 2.0 or whatever it was before
@@ -182,7 +210,7 @@ export class Physics {
         // Check collisions with all planets
         for (const planet of planets) {
             const planetPos = planet.position;
-            const planetRadius = planet.geometry.parameters.radius;
+            const planetRadius = (planet.geometry as THREE.SphereGeometry).parameters.radius;
 
             const distanceToCenter = playerPosition.distanceTo(planetPos);
             const distanceToSurface = distanceToCenter - planetRadius;
@@ -218,7 +246,7 @@ export class Physics {
     }
 
     // Calculate the UP direction based on nearest planet
-    calculateUpDirection(playerPosition, planets) {
+    calculateUpDirection(playerPosition: THREE.Vector3, planets: THREE.Mesh[]): THREE.Vector3 {
         const nearest = this.getNearestPlanet(playerPosition, planets);
 
         if (!nearest.planet || nearest.distance > this.alignmentDistance) {
@@ -231,7 +259,15 @@ export class Physics {
     }
 
     // Update player physics with smoother transitions
-    updatePlayerPhysics(player, controls, deltaTime, planets, sun, camera, gameState) {
+    updatePlayerPhysics(
+        player: any,
+        controls: any,
+        deltaTime: number,
+        planets: THREE.Mesh[],
+        sun: THREE.Mesh | null,
+        camera: THREE.Camera,
+        gameState: any
+    ): PhysicsResult {
         // Handle stamina for sprinting
         this.updateStamina(player, controls, deltaTime);
 
@@ -295,12 +331,12 @@ export class Physics {
             dragCoefficient = spaceDrag;
         } else if (environment.inTransition) {
             // In the transition zone (outer atmosphere), scale drag gradually
-            dragCoefficient = spaceDrag + (atmosphereDrag - spaceDrag) * (1 - environment.transitionFactor);
+            dragCoefficient = spaceDrag + (atmosphereDrag - spaceDrag) * (1 - (environment.transitionFactor ?? 0));
         } else if (!environment.onGround) {
             // In atmosphere but not on ground, scale drag based on altitude
             // Preserve momentum at higher altitudes in the atmosphere
             const planetRadius = environment.nearest.planet ?
-                environment.nearest.planet.geometry.parameters.radius : 100;
+                (environment.nearest.planet.geometry as THREE.SphereGeometry).parameters.radius : 100;
 
             // Calculate a normalized distance (0 = at surface, 1 = at atmosphere boundary)
             const distanceFromSurface = environment.nearest.distance;
@@ -326,7 +362,7 @@ export class Physics {
 
             // Blend speed factors based on transition factor
             let speedFactor = environment.inTransition ?
-                groundSpeedFactor + (spaceSpeedFactor - groundSpeedFactor) * environment.transitionFactor :
+                groundSpeedFactor + (spaceSpeedFactor - groundSpeedFactor) * (environment.transitionFactor ?? 0) :
                 environment.inSpace ? spaceSpeedFactor : groundSpeedFactor;
 
             // Apply sprint multiplier if sprinting and on ground or in atmosphere
@@ -360,8 +396,8 @@ export class Physics {
             // Blend between the two types of gravity
             gravityVector = new THREE.Vector3()
                 .addVectors(
-                    orbitalGravity.multiplyScalar(environment.transitionFactor),
-                    dirGravity.multiplyScalar(1 - environment.transitionFactor)
+                    orbitalGravity.multiplyScalar(environment.transitionFactor ?? 0),
+                    dirGravity.multiplyScalar(1 - (environment.transitionFactor ?? 0))
                 );
         } else {
             // In atmosphere - simplified directional gravity
@@ -472,7 +508,7 @@ export class Physics {
     }
 
     // Handle stamina consumption and regeneration
-    updateStamina(player, controls, deltaTime) {
+    updateStamina(player: any, controls: any, deltaTime: number): void {
         // Consume stamina if sprinting and moving
         if (controls.sprint && player.stamina > 0) {
             // Consume stamina while sprinting
@@ -492,7 +528,12 @@ export class Physics {
         }
     }
 
-    calculateMoveDirection(controls, camera, inSpace, onGround) {
+    calculateMoveDirection(
+        controls: any,
+        camera: THREE.Camera,
+        inSpace: boolean,
+        onGround: boolean
+    ): THREE.Vector3 {
         const moveDirection = new THREE.Vector3();
 
         // Get camera direction vectors

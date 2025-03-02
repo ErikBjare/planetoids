@@ -1,6 +1,6 @@
 # Mini Solar System Explorer
 
-A 3D space exploration game built with Three.js where players navigate a procedurally-featured miniature solar system, collect discovery points, and upgrade their equipment.
+A 3D space exploration game built with Three.js and TypeScript where players navigate a procedurally-featured miniature solar system, collect discovery points, and upgrade their equipment.
 
 ![Game Screenshot](screenshot.png)
 
@@ -19,40 +19,42 @@ Mini Solar System Explorer is a web-based 3D game where players begin on a small
 ## Technical Details
 
 - Built with Three.js for 3D rendering
-- Written in modern JavaScript (ES6+)
-- Uses ES6 modules for clean code organization
+- Written in TypeScript for better code organization and type safety
+- Uses Vite as the build system for fast development and optimized production builds
+- Uses ES modules for clean code organization
 - Foundation for WebSocket-based multiplayer
 - Fully client-side with no backend dependencies
 
 ## Installation and Running
 
 ### Prerequisites
+- Node.js 16+ and npm 
 - A modern web browser with WebGL support
-- A local web server (see options below)
 
-### Running the Game
-
-The game must be served from a web server due to ES6 module security requirements. Options include:
-
-#### Using Python:
+### Setup
 ```bash
-# Python 3
-python -m http.server
+# Clone the repository
+git clone https://github.com/yourusername/mini-solar-system-explorer.git
+cd mini-solar-system-explorer
 
-# Python 2
-python -m SimpleHTTPServer
+# Install dependencies
+npm install
 ```
 
-#### Using Node.js:
+### Development
 ```bash
-# Install serve globally
-npm install -g serve
-
-# Run the server
-serve
+# Start the Vite development server
+npm run dev
 ```
 
-Then open your browser and navigate to the provided URL (usually http://localhost:8000 or http://localhost:3000).
+### Production Build
+```bash
+# Build for production
+npm run build
+
+# Preview the production build
+npm run preview
+```
 
 ## Game Controls
 
@@ -62,6 +64,7 @@ Then open your browser and navigate to the provided URL (usually http://localhos
 - **Hold Space**: Activate jetpack/thrusters
 - **E**: Interact with upgrade stations
 - **Tab**: Toggle upgrade menu
+- **Mouse Wheel**: Switch camera mode
 
 ## Gameplay
 
@@ -82,9 +85,23 @@ Then open your browser and navigate to the provided URL (usually http://localhos
 
 ## Project Structure
 
-- **index.html**: Main HTML file with UI elements
-- **main.js**: Game logic, physics, and player controls
-- **world.js**: Solar system generation and game objects
+```bash
+├── src                 # Source code
+│   ├── types.ts        # TypeScript interfaces and type definitions
+│   ├── main.ts         # Game initialization and main loop
+│   ├── world.ts        # Solar system generation and game objects
+│   ├── physics.ts      # Physics simulation and planet gravity
+│   ├── planets.ts      # Planet generation and features
+│   ├── player.ts       # Player controller and movement
+│   ├── celestial.ts    # Sun, stars, and space objects
+│   └── ui.ts           # User interface and HUD elements
+├── public              # Static assets
+│   └── screenshot.png  # Game screenshot
+├── index.html          # HTML entry point
+├── vite.config.ts      # Vite configuration
+├── tsconfig.json       # TypeScript configuration
+└── package.json        # Project dependencies
+```
 
 ## Future Development Tasks
 
@@ -111,6 +128,8 @@ Then open your browser and navigate to the provided URL (usually http://localhos
 - [ ] Create pause menu
 
 ### Technical Enhancements
+- [x] Migrate to TypeScript for better code organization
+- [x] Implement Vite build system for faster development
 - [ ] Optimize planet geometry for better performance
 - [ ] Implement level of detail (LOD) for distant objects
 - [ ] Add object pooling for particle effects

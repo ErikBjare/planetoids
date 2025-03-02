@@ -5,10 +5,10 @@ export class CelestialFactory {
         // Configuration options
     }
 
-    createSun(scene) {
+    createSun(scene: THREE.Scene): THREE.Mesh {
         // Create sun
         const sunGeometry = new THREE.SphereGeometry(50, 32, 32);
-        const sunMaterial = new THREE.MeshBasicMaterial({
+        const sunMaterial = new THREE.MeshStandardMaterial({
             color: 0xffff00,
             emissive: 0xffff00,
             emissiveIntensity: 1.0
@@ -106,12 +106,8 @@ export class CelestialFactory {
             hemisphere: hemisphereLight
         };
 
-        // Add lens flare effect for the sun
-        // Note: Lens flare implementation would go here if needed
-        // Currently just setting up the update function without active flare objects
-
         // Create a lens flare update function for future use
-        sun.userData.updateFlare = (camera) => {
+        sun.userData.updateFlare = (camera: THREE.Camera) => {
             // Update the glow shader view vector based on camera position
             if (glowMaterial.uniforms && camera) {
                 const viewVector = new THREE.Vector3().subVectors(camera.position, sun.position);
@@ -123,14 +119,14 @@ export class CelestialFactory {
     }
 
     // Method to update sun position and lighting
-    updateSun(sun, deltaTime, camera) {
+    updateSun(sun: THREE.Mesh, deltaTime: number, camera?: THREE.Camera): void {
         if (!sun) return;
 
         // Update any directional lights to follow the camera
         // This makes shadows work properly as the player moves around
         if (sun.userData.directionalLight && camera) {
             // Update directional light position to always cast shadows toward camera
-            const dirLight = sun.userData.directionalLight;
+            const dirLight = sun.userData.directionalLight as THREE.DirectionalLight;
 
             // Position the directional light at the sun's position
             dirLight.position.copy(sun.position);
@@ -145,7 +141,7 @@ export class CelestialFactory {
         }
     }
 
-    createStarfield(scene) {
+    createStarfield(scene: THREE.Scene): THREE.Points {
         // Create a starfield in the background
         const starCount = 2000;
         const starsGeometry = new THREE.BufferGeometry();
@@ -178,7 +174,7 @@ export class CelestialFactory {
     }
 
     // Create a distant nebula
-    createNebula(scene) {
+    createNebula(scene: THREE.Scene): THREE.Points {
         // Size is used to determine the scale of the nebula (but not directly referenced)
         const nebulaSizeRange = 5000;
         const geometry = new THREE.BufferGeometry();
@@ -232,7 +228,7 @@ export class CelestialFactory {
     }
 
     // Create asteroid belt between planets
-    createAsteroidBelt(scene, innerRadius, outerRadius, count = 200) {
+    createAsteroidBelt(scene: THREE.Scene, innerRadius: number, outerRadius: number, count = 200): THREE.Group {
         const asteroids = new THREE.Group();
 
         for (let i = 0; i < count; i++) {
@@ -283,11 +279,13 @@ export class CelestialFactory {
     }
 
     // Update the asteroid belt rotation
-    updateAsteroidBelt(asteroidBelt, deltaTime) {
+    updateAsteroidBelt(asteroidBelt: THREE.Group, deltaTime: number): void {
         if (!asteroidBelt) return;
 
         // Update each asteroid
         asteroidBelt.children.forEach(asteroid => {
+            if (!asteroid.userData) return;
+
             // Update orbital position
             asteroid.userData.orbitAngle += asteroid.userData.orbitSpeed * deltaTime;
             const radius = asteroid.userData.orbitRadius;

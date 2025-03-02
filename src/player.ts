@@ -1,8 +1,89 @@
 import * as THREE from 'three';
-import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
+import { UI } from './ui';
+import { Physics } from './physics';
+import { DebugArrows } from './types';
 
 export class PlayerController {
-    constructor(scene, camera, ui) {
+    scene: THREE.Scene;
+    camera: THREE.Camera;
+    ui: UI;
+
+    // Player properties
+    position: THREE.Vector3;
+    velocity: THREE.Vector3;
+    scale: THREE.Vector3;
+
+    // Two-part rotation system
+    bodyQuaternion: THREE.Quaternion;
+    headRotation: THREE.Euler;
+
+    // Legacy rotation properties (for compatibility)
+    rotation: THREE.Euler;
+    quaternion: THREE.Quaternion;
+
+    // Thruster states
+    jetpackActive: boolean;
+    downThrustersActive: boolean;
+
+    // Alignment tracking
+    alignmentNeeded: number;
+    alignmentStrength: number;
+    currentUpDirection: THREE.Vector3;
+
+    // Player state
+    onGround: boolean;
+    fuel: number;
+    maxFuel: number;
+    fuelRechargeRate: number;
+    lastPlanetVisited: number;
+    noclip: boolean;
+
+    // Stamina for sprinting
+    stamina: number;
+    maxStamina: number;
+    staminaRechargeRate: number;
+    staminaDrainRate: number;
+    isSprinting: boolean;
+
+    // Movement controls state for animation
+    moveForward: boolean;
+    moveBackward: boolean;
+    moveLeft: boolean;
+    moveRight: boolean;
+
+    // Camera settings
+    cameraMode: string;
+    cameraDistance: number;
+    targetCameraDistance: number;
+    cameraHeight: number;
+    cameraZoomSpeed: number;
+    scopeZoom: number;
+    normalFOV: number;
+    scopeFOV: number;
+
+    // Player model parts
+    model: THREE.Group;
+    playerBody: THREE.Mesh;
+    helmet: THREE.Mesh;
+    visor: THREE.Mesh;
+    backpack: THREE.Mesh;
+    flame: THREE.Mesh;
+    leftArm: THREE.Mesh;
+    rightArm: THREE.Mesh;
+    leftLeg: THREE.Mesh;
+    rightLeg: THREE.Mesh;
+    cameraPivot: THREE.Object3D;
+    dummyCamera: THREE.PerspectiveCamera;
+
+    // Controls
+    pointerLockControls: PointerLockControls;
+    mouseSensitivity: number;
+
+    // Debug arrows
+    debugArrows?: DebugArrows;
+
+    constructor(scene: THREE.Scene, camera: THREE.Camera, ui: UI) {
         this.scene = scene;
         this.camera = camera;
         this.ui = ui;
@@ -60,6 +141,22 @@ export class PlayerController {
         this.normalFOV = 75; // Normal camera FOV
         this.scopeFOV = 30;  // FOV when in scope mode
 
+        // Create player model and required properties (will be initialized in createPlayerModel)
+        this.model = new THREE.Group();
+        this.playerBody = new THREE.Mesh();
+        this.helmet = new THREE.Mesh();
+        this.visor = new THREE.Mesh();
+        this.backpack = new THREE.Mesh();
+        this.flame = new THREE.Mesh();
+        this.leftArm = new THREE.Mesh();
+        this.rightArm = new THREE.Mesh();
+        this.leftLeg = new THREE.Mesh();
+        this.rightLeg = new THREE.Mesh();
+        this.cameraPivot = new THREE.Object3D();
+        this.dummyCamera = new THREE.PerspectiveCamera();
+        this.pointerLockControls = new PointerLockControls(this.dummyCamera, document.body);
+        this.mouseSensitivity = 0.002;
+
         // Create player model
         this.createPlayerModel();
 
@@ -73,7 +170,7 @@ export class PlayerController {
         this.ui.updateCameraMode(this.cameraMode);
     }
 
-    createPlayerModel() {
+    createPlayerModel(): void {
         // Create a simple astronaut model
         // Main body group
         this.model = new THREE.Group();
@@ -166,7 +263,7 @@ export class PlayerController {
         this.updateModelVisibility();
     }
 
-    setupCamera() {
+    setupCamera(): void {
         // Add a pivot point for third-person camera
         this.cameraPivot = new THREE.Object3D();
         this.cameraPivot.position.y = this.cameraHeight;
@@ -176,7 +273,7 @@ export class PlayerController {
         this.mouseSensitivity = 0.002;
 
         // Create a separate object for PointerLockControls that won't affect our camera
-        this.dummyCamera = new THREE.Object3D();
+        this.dummyCamera = new THREE.PerspectiveCamera();
         this.scene.add(this.dummyCamera); // Must add to scene for controls to work
 
         // Use a different approach - completely abandon PointerLockControls' camera management
@@ -227,7 +324,7 @@ export class PlayerController {
     }
 
     // Add a visual indicator to help debug orientation issues
-    createOrientationDebugger() {
+    createOrientationDebugger(): void {
         // Create arrows with different representations
         // Red arrow - shows velocity
         const velocityArrow = new THREE.ArrowHelper(
@@ -267,7 +364,7 @@ export class PlayerController {
         };
     }
 
-    handleMouseWheel(event) {
+    handleMouseWheel(event: WheelEvent): void {
         // Only process if pointer is locked (active gameplay)
         if (!this.pointerLockControls.isLocked) return;
 
@@ -292,27 +389,27 @@ export class PlayerController {
         }
     }
 
-    setCameraMode(mode) {
+    setCameraMode(mode: string): void {
         this.cameraMode = mode;
 
         // Set camera distance based on mode
         switch (mode) {
         case 'scope':
             this.targetCameraDistance = 0;
-            this.camera.fov = this.scopeFOV;
-            this.camera.updateProjectionMatrix();
+            (this.camera as THREE.PerspectiveCamera).fov = this.scopeFOV;
+            (this.camera as THREE.PerspectiveCamera).updateProjectionMatrix();
             break;
 
         case 'firstPerson':
             this.targetCameraDistance = 0;
-            this.camera.fov = this.normalFOV;
-            this.camera.updateProjectionMatrix();
+            (this.camera as THREE.PerspectiveCamera).fov = this.normalFOV;
+            (this.camera as THREE.PerspectiveCamera).updateProjectionMatrix();
             break;
 
         case 'thirdPerson':
             this.targetCameraDistance = 5; // Distance behind player
-            this.camera.fov = this.normalFOV;
-            this.camera.updateProjectionMatrix();
+            (this.camera as THREE.PerspectiveCamera).fov = this.normalFOV;
+            (this.camera as THREE.PerspectiveCamera).updateProjectionMatrix();
             break;
         }
 
@@ -323,7 +420,7 @@ export class PlayerController {
         this.ui.updateCameraMode(mode);
     }
 
-    updateModelVisibility() {
+    updateModelVisibility(): void {
         // Show model in third person, hide in first person
         const isVisible = this.cameraMode === 'thirdPerson';
 
@@ -338,7 +435,7 @@ export class PlayerController {
         this.rightLeg.visible = isVisible;
     }
 
-    update(deltaTime) {
+    update(deltaTime: number, physics?: Physics, planets?: THREE.Mesh[]): void {
         // Update model position
         this.model.position.copy(this.position);
 
@@ -358,7 +455,7 @@ export class PlayerController {
         }
 
         // Update camera using our two-part rotation system
-        this.updateCamera();
+        this.updateCamera(deltaTime);
 
         // Update player model animations
         this.updateModelAnimations(deltaTime);
@@ -367,7 +464,7 @@ export class PlayerController {
         this.updateJetpackFlame();
     }
 
-    updateCamera() {
+    updateCamera(deltaTime?: number): void {
         // Create quaternion from head rotation (player look direction)
         const headQuat = new THREE.Quaternion().setFromEuler(this.headRotation);
 
@@ -462,7 +559,7 @@ export class PlayerController {
 
             // 2. Calculate forces for GREEN ARROW (combined force)
             let forceVector = new THREE.Vector3(0, 0, 0);
-            let nearestPlanet = null;
+            let nearestPlanet: THREE.Mesh | null = null;
             let minDistance = Infinity;
 
             // Find nearest planet for gravity
@@ -535,7 +632,7 @@ export class PlayerController {
         }
     }
 
-    updateModelAnimations(deltaTime) {
+    updateModelAnimations(deltaTime: number): void {
         // Simple animations based on movement
         if (this.onGround && this.velocity.length() > 0.5) {
             // Walking animation - swing legs and arms
@@ -626,7 +723,7 @@ export class PlayerController {
         }
     }
 
-    updateJetpackFlame() {
+    updateJetpackFlame(): void {
         // Show flame when jetpack is active
         if (this.jetpackActive && this.fuel > 0) {
             this.flame.visible = true;
@@ -642,16 +739,16 @@ export class PlayerController {
         }
     }
 
-    setJetpackActive(active) {
+    setJetpackActive(active: boolean): void {
         this.jetpackActive = active;
     }
 
-    setDownThrustersActive(active) {
+    setDownThrustersActive(active: boolean): void {
         this.downThrustersActive = active;
     }
 
     // Getters/setters for controlling rotation - updated for two-part system
-    setRotationFromCamera() {
+    setRotationFromCamera(): void {
         // In our new system, we extract the body orientation from the camera's
         // This maintains compatibility with any code that calls this method
 
@@ -667,7 +764,7 @@ export class PlayerController {
     }
 
     // Apply external rotation to player - updated for two-part system
-    setRotationFromQuaternion(quaternion) {
+    setRotationFromQuaternion(quaternion: THREE.Quaternion): void {
         // Update body orientation with the provided quaternion
         this.bodyQuaternion.copy(quaternion);
 
@@ -683,7 +780,7 @@ export class PlayerController {
     }
 
     // Helper method to get the complete final orientation (body + head)
-    getCombinedQuaternion() {
+    getCombinedQuaternion(): THREE.Quaternion {
         // Convert head rotation to quaternion
         const headQuat = new THREE.Quaternion().setFromEuler(this.headRotation);
 
@@ -692,7 +789,7 @@ export class PlayerController {
     }
 
     // Physics-based alignment system - now only affects body orientation
-    alignWithSurface(upDirection, deltaTime, alignmentSpeed) {
+    alignWithSurface(upDirection: THREE.Vector3, deltaTime: number, alignmentSpeed: number): boolean {
         // Don't align in noclip mode
         if (this.noclip) {
             return false;
@@ -707,7 +804,7 @@ export class PlayerController {
 
         // 1. Calculate gravitational influence to determine alignment strength
         let gravityFactor = 0;
-        let nearestPlanet = null;
+        let nearestPlanet: THREE.Mesh | null = null;
         let minDistance = Infinity;
         let escapeVelocity = 0;
 
@@ -715,9 +812,10 @@ export class PlayerController {
         for (const planet of planets) {
             if (!planet || !planet.geometry || !planet.position) continue;
 
-            const planetMass = planet.geometry.parameters.radius * 10; // Mass proportional to radius
+            const planetGeometry = planet.geometry as THREE.SphereGeometry;
+            const planetMass = planetGeometry.parameters.radius * 10; // Mass proportional to radius
             const distance = Math.max(0.1, this.position.distanceTo(planet.position));
-            const surfaceDistance = distance - planet.geometry.parameters.radius;
+            const surfaceDistance = distance - planetGeometry.parameters.radius;
 
             // Calculate escape velocity for this planet
             const planetEscapeVel = Math.sqrt(2 * (physics?.gravitationalConstant || 100) * planetMass / distance) || 0;
@@ -811,11 +909,11 @@ export class PlayerController {
         return alignFactor < 0.1;
     }
 
-    getControls() {
+    getControls(): PointerLockControls {
         return this.pointerLockControls;
     }
 
-    isPointerLocked() {
+    isPointerLocked(): boolean {
         return this.pointerLockControls.isLocked;
     }
 }
