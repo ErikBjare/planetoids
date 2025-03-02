@@ -1,1 +1,1 @@
-files = ["README.md", "index.html", "src/main.rs"]
+files = ["README.md", "index.html", "src/main.rs", "package.json"]
